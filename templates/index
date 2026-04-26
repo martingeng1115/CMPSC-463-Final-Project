@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CrisisRoute Logistical System</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #d32f2f; }
+        button { background: #1976d2; color: white; border: none; padding: 10px 15px; cursor: pointer; border-radius: 4px;}
+        pre { background: #eee; padding: 10px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CrisisRoute Logistical System</h1>
+        <p>Optimize supply loading under weight constraints and find the safest path through a conflict zone.</p>
+        
+        <button onclick="runAlgorithms()">Execute Scenario Simulation</button>
+        
+        <h3>Simulation Results:</h3>
+        <pre id="output">Awaiting execution...</pre>
+    </div>
+
+    <script>
+        function runAlgorithms() {
+            const payload = {
+                truck_capacity: 50,
+                supplies: [
+                    {name: "Medical Kits", weight: 20, value: 100},
+                    {name: "Water Rations", weight: 30, value: 80},
+                    {name: "Blankets", weight: 15, value: 40},
+                    {name: "Canned Food", weight: 25, value: 70}
+                ],
+                map_graph: {
+                    'Basecamp': {'Checkpoint_1': 10, 'Checkpoint_2': 15},
+                    'Checkpoint_1': {'Refugee_Camp': 30, 'Checkpoint_3': 10},
+                    'Checkpoint_2': {'Checkpoint_3': 5, 'Refugee_Camp': 25},
+                    'Checkpoint_3': {'Refugee_Camp': 10},
+                    'Refugee_Camp': {}
+                },
+                start_node: 'Basecamp',
+                end_node: 'Refugee_Camp'
+            };
+
+            fetch('/api/calculate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('output').textContent = JSON.stringify(data, null, 2);
+            });
+        }
+    </script>
+</body>
+</html>
