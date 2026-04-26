@@ -57,7 +57,6 @@
 </div>
 
 <script>
-    // 1. Initialize Vis.js Interactive Map
     let nodes = new vis.DataSet([
         {id: 1, label: 'Basecamp', color: '#3498db'},
         {id: 2, label: 'Checkpoint Alpha'},
@@ -109,13 +108,11 @@
     }
 
     function updateDashboard(data) {
-        // Update Alert Text
         const alertBox = document.getElementById('sim-results');
         alertBox.style.display = 'block';
         alertBox.innerHTML = `<strong>Optimal Route:</strong> ${data.route_plan.path.join(' ➔ ')} <br>
                               <strong>Probability of Survival:</strong> ${data.route_plan.success_prob}%`;
 
-        // Highlight route on map
         edges.forEach(edge => {
             let fromLabel = nodes.get(edge.from).label;
             let toLabel = nodes.get(edge.to).label;
@@ -126,7 +123,6 @@
             }
         });
 
-        // Generate Supply Pie Chart
         let labels = data.supply_plan.selected.map(i => i.name);
         let values = data.supply_plan.selected.map(i => i.value);
         if(supplyChartInstance) supplyChartInstance.destroy();
@@ -135,7 +131,6 @@
             data: { labels: labels, datasets: [{ data: values, backgroundColor: ['#3498db', '#9b59b6', '#f1c40f', '#1abc9c'] }] }
         });
 
-        // Generate Risk Bar Chart
         if(riskChartInstance) riskChartInstance.destroy();
         riskChartInstance = new Chart(document.getElementById('riskChart'), {
             type: 'bar',
