@@ -3,7 +3,6 @@ import heapq
 import sqlite3
 import datetime
 import numpy as np
-import random
 
 app = Flask(__name__)
 
@@ -104,14 +103,19 @@ def simulate():
     s_plan = optimize_supplies_2d(data['weight_cap'], data['volume_cap'], data['supplies'])
     r_plan = get_route_and_sim(data['graph'], data['start'], data['end'])
     
+    date_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    route_str = " -> ".join(r_plan['path'])
+    
     conn = sqlite3.connect('crisis_logs.db')
     c = conn.cursor()
     c.execute("INSERT INTO simulations (date, route, risk, payload_value) VALUES (?, ?, ?, ?)",
-              (datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), " -> ".join(r_plan['path']), r_plan['avg_simulated'], s_plan['max_value']))
+              (date_str, route_str, r_plan['avg_simulated'], s_plan['max_value']))
     conn.commit()
     conn.close()
     
-    return jsonify({"supply_plan": s_plan, "route_plan": r_plan})
+    new_log = {"date": date_str, "route": route_str, "risk": r_plan['avg_simulated'], "payload_value": s_plan['max_value']}
+    
+    return jsonify({"supply_plan": s_plan, "route_plan": r_plan, "new_log": new_log})
 
 if __name__ == '__main__':
     app.run(debug=True)
