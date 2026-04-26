@@ -1,124 +1,146 @@
-from flask import Flask, request, jsonify, render_template
-import heapq
-import sqlite3
-import datetime
-import numpy as np
-import random
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>CrisisRoute | Advanced Logistics</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
+        .grid-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 1200px; margin: auto; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        h1, h2, h3 { color: #2c3e50; margin-top: 0;}
+        button { background: #e74c3c; color: white; border: none; padding: 12px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; width: 100%; transition: 0.3s;}
+        button:hover { background: #c0392b; }
+        #network { width: 100%; height: 300px; border: 1px solid #ddd; background: #fafafa; border-radius: 4px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; font-size: 14px;}
+        .alert { background: #ffeaa7; padding: 10px; border-radius: 4px; border-left: 4px solid #fdcb6e; margin-bottom: 15px;}
+    </style>
+</head>
+<body>
 
-app = Flask(__name__)
+<div style="max-width: 1200px; margin: auto; margin-bottom: 20px;">
+    <h1>CrisisRoute Command Center</h1>
+    <p>Multi-constraint resource allocation and Monte Carlo risk-assessed pathfinding.</p>
+    <button onclick="runSim()">Execute Full System Simulation</button>
+</div>
 
+<div class="grid-container">
+    <div class="card">
+        <h3>Interactive Conflict Zone Map</h3>
+        <p style="font-size: 12px; color: #7f8c8d;">Drag nodes to reposition. Edge weights represent base danger levels.</p>
+        <div id="network"></div>
+    </div>
 
-def init_db():
-    conn = sqlite3.connect('crisis_logs.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS simulations 
-                 (id INTEGER PRIMARY KEY, date TEXT, route TEXT, risk REAL, payload_value INTEGER)''')
-    conn.commit()
-    conn.close()
+    <div class="card">
+        <h3>Monte Carlo Risk Analysis</h3>
+        <div id="sim-results" class="alert" style="display:none;"></div>
+        <canvas id="riskChart" height="150"></canvas>
+    </div>
 
-init_db()
+    <div class="card">
+        <h3>Optimized Payload (Knapsack)</h3>
+        <canvas id="supplyChart" height="150"></canvas>
+    </div>
 
+    <div class="card">
+        <h3>Recent Deployments (DB Log)</h3>
+        <table>
+            <tr><th>Date</th><th>Route</th><th>Sim Risk</th><th>Payload Value</th></tr>
+            {% for row in history %}
+            <tr><td>{{ row[1] }}</td><td>{{ row[2] }}</td><td>{{ row[3] }}</td><td>{{ row[4] }}</td></tr>
+            {% else %}
+            <tr><td colspan="4">No previous data. Run a simulation.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
 
-def optimize_supplies_2d(weight_cap, volume_cap, items):
-    n = len(items)
+<script>
+    let nodes = new vis.DataSet([
+        {id: 1, label: 'Basecamp', color: '#3498db'},
+        {id: 2, label: 'Checkpoint Alpha'},
+        {id: 3, label: 'Checkpoint Bravo'},
+        {id: 4, label: 'Ruined Bridge'},
+        {id: 5, label: 'Refugee Camp', color: '#2ecc71'}
+    ]);
+    let edges = new vis.DataSet([
+        {from: 1, to: 2, label: '10'}, {from: 1, to: 3, label: '15'},
+        {from: 2, to: 5, label: '30'}, {from: 2, to: 4, label: '10'},
+        {from: 3, to: 4, label: '5'},  {from: 4, to: 5, label: '12'}
+    ]);
+    let network = new vis.Network(document.getElementById('network'), {nodes, edges}, {physics: false});
 
-    dp = [[[0 for _ in range(volume_cap + 1)] for _ in range(weight_cap + 1)] for _ in range(n + 1)]
-    
-    for i in range(1, n + 1):
-        w = items[i-1]['weight']
-        vol = items[i-1]['volume']
-        val = items[i-1]['value']
-        
-        for curr_w in range(weight_cap + 1):
-            for curr_vol in range(volume_cap + 1):
-                if w <= curr_w and vol <= curr_vol:
-                    dp[i][curr_w][curr_vol] = max(val + dp[i-1][curr_w-w][curr_vol-vol], dp[i-1][curr_w][curr_vol])
-                else:
-                    dp[i][curr_w][curr_vol] = dp[i-1][curr_w][curr_vol]
-                    
+    let supplyChartInstance = null;
+    let riskChartInstance = null;
 
-    res = []
-    cw, cv = weight_cap, volume_cap
-    for i in range(n, 0, -1):
-        if dp[i][cw][cv] != dp[i-1][cw][cv]:
-            res.append(items[i-1])
-            cw -= items[i-1]['weight']
-            cv -= items[i-1]['volume']
-            
-    return {"max_value": dp[n][weight_cap][volume_cap], "selected": res}
+    function runSim() {
+        const payload = {
+            weight_cap: 50,
+            volume_cap: 40,
+            supplies: [
+                {name: "Trauma Kits", weight: 20, volume: 15, value: 100},
+                {name: "Water Pallets", weight: 30, volume: 20, value: 80},
+                {name: "Thermal Blankets", weight: 10, volume: 25, value: 50},
+                {name: "MRE Rations", weight: 25, volume: 15, value: 85},
+                {name: "Antibiotics", weight: 5, volume: 5, value: 95}
+            ],
+            graph: {
+                'Basecamp': {'Checkpoint Alpha': 10, 'Checkpoint Bravo': 15},
+                'Checkpoint Alpha': {'Refugee Camp': 30, 'Ruined Bridge': 10},
+                'Checkpoint Bravo': {'Ruined Bridge': 5},
+                'Ruined Bridge': {'Refugee Camp': 12},
+                'Refugee Camp': {}
+            },
+            start: 'Basecamp',
+            end: 'Refugee Camp'
+        };
 
-def get_route_and_sim(graph, start, end):
-    q = []
-    heapq.heappush(q, (0, start))
-    dist = {n: float('inf') for n in graph}
-    dist[start] = 0
-    prev = {n: None for n in graph}
+        fetch('/api/simulate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        })
+        .then(res => res.json())
+        .then(data => {
+            updateDashboard(data);
+        });
+    }
 
-    while q:
-        curr_dist, curr_node = heapq.heappop(q)
-        if curr_dist > dist[curr_node]: continue
-        if curr_node == end: break
+    function updateDashboard(data) {
+        const alertBox = document.getElementById('sim-results');
+        alertBox.style.display = 'block';
+        alertBox.innerHTML = `<strong>Optimal Route:</strong> ${data.route_plan.path.join(' ➔ ')} <br>
+                              <strong>Probability of Survival:</strong> ${data.route_plan.success_prob}%`;
 
-        for neighbor, weight in graph[curr_node].items():
-            d = curr_dist + weight
-            if d < dist[neighbor]:
-                dist[neighbor] = d
-                prev[neighbor] = curr_node
-                heapq.heappush(q, (d, neighbor))
+        edges.forEach(edge => {
+            let fromLabel = nodes.get(edge.from).label;
+            let toLabel = nodes.get(edge.to).label;
+            if(data.route_plan.path.includes(fromLabel) && data.route_plan.path.includes(toLabel)) {
+                edges.update({id: edge.id, color: {color: '#e74c3c'}, width: 3});
+            } else {
+                edges.update({id: edge.id, color: {color: '#848484'}, width: 1});
+            }
+        });
 
-    path = []
-    curr = end
-    while prev[curr] is not None:
-        path.insert(0, curr)
-        curr = prev[curr]
-    if path: path.insert(0, curr)
-    
-    baseline_risk = dist[end]
+        let labels = data.supply_plan.selected.map(i => i.name);
+        let values = data.supply_plan.selected.map(i => i.value);
+        if(supplyChartInstance) supplyChartInstance.destroy();
+        supplyChartInstance = new Chart(document.getElementById('supplyChart'), {
+            type: 'doughnut',
+            data: { labels: labels, datasets: [{ data: values, backgroundColor: ['#3498db', '#9b59b6', '#f1c40f', '#1abc9c'] }] }
+        });
 
-
-    simulated_risks = []
-    for _ in range(1000):
-        sim_risk = 0
-        for i in range(len(path)-1):
-            base_edge = graph[path[i]][path[i+1]]
-            fluctuation = np.random.uniform(0.8, 2.5) 
-            sim_risk += (base_edge * fluctuation)
-        simulated_risks.append(sim_risk)
-        
-    avg_sim_risk = round(np.mean(simulated_risks), 2)
-    success_prob = round(len([r for r in simulated_risks if r <= baseline_risk * 1.5]) / 10, 1)
-
-    return {"path": path, "baseline": baseline_risk, "avg_simulated": avg_sim_risk, "success_prob": success_prob}
-
-@app.route('/')
-def home():
-  
-    conn = sqlite3.connect('crisis_logs.db')
-    c = conn.cursor()
-    c.execute("SELECT * FROM simulations ORDER BY id DESC LIMIT 5")
-    history = c.fetchall()
-    conn.close()
-    return render_template('index.html', history=history)
-
-@app.route('/api/simulate', methods=['POST'])
-def simulate():
-    data = request.json
-    
-
-    s_plan = optimize_supplies_2d(data['weight_cap'], data['volume_cap'], data['supplies'])
-    
-o
-    r_plan = get_route_and_sim(data['graph'], data['start'], data['end'])
-    
-
-    conn = sqlite3.connect('crisis_logs.db')
-    c = conn.cursor()
-    c.execute("INSERT INTO simulations (date, route, risk, payload_value) VALUES (?, ?, ?, ?)",
-              (datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), " -> ".join(r_plan['path']), r_plan['avg_simulated'], s_plan['max_value']))
-    conn.commit()
-    conn.close()
-    
-    return jsonify({"supply_plan": s_plan, "route_plan": r_plan})
-
-if __name__ == '__main__':
-    app.run(debug=True)
+        if(riskChartInstance) riskChartInstance.destroy();
+        riskChartInstance = new Chart(document.getElementById('riskChart'), {
+            type: 'bar',
+            data: {
+                labels: ['Baseline Risk', 'Simulated Avg Risk (Monte Carlo)'],
+                datasets: [{ label: 'Danger Index', data: [data.route_plan.baseline, data.route_plan.avg_simulated], backgroundColor: ['#2ecc71', '#e74c3c'] }]
+            },
+            options: { scales: { y: { beginAtZero: true } } }
+        });
+    }
+</script>
+</body>
+</html>
