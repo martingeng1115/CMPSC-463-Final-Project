@@ -9,8 +9,10 @@
         .grid-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 1200px; margin: auto; }
         .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
         h1, h2, h3 { color: #2c3e50; margin-top: 0;}
-        button { background: #e74c3c; color: white; border: none; padding: 12px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; width: 100%; transition: 0.3s;}
-        button:hover { background: #c0392b; }
+        .btn-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        button { background: #e74c3c; color: white; border: none; padding: 12px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; width: 100%; transition: 0.3s; font-weight: bold;}
+        button.secondary { background: #34495e; }
+        button:hover { filter: brightness(1.1); }
         #network { width: 100%; height: 300px; border: 1px solid #ddd; background: #fafafa; border-radius: 4px; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; font-size: 14px;}
@@ -19,10 +21,14 @@
 </head>
 <body>
 
-<div style="max-width: 1200px; margin: auto; margin-bottom: 20px;">
+<div style="max-width: 1200px; margin: auto;">
     <h1>CrisisRoute Command Center</h1>
     <p>Multi-constraint resource allocation and Monte Carlo risk-assessed pathfinding.</p>
-    <button onclick="runSim()">Execute Full System Simulation</button>
+    
+    <div class="btn-group">
+        <button class="secondary" onclick="generateRandomMap()">⟳ Generate New Conflict Zone Map</button>
+        <button onclick="runSim()">Execute Full System Simulation</button>
+    </div>
 </div>
 
 <div class="grid-container">
@@ -57,22 +63,77 @@
 </div>
 
 <script>
-    let nodes = new vis.DataSet([
-        {id: 1, label: 'Basecamp', color: '#3498db'},
-        {id: 2, label: 'Checkpoint Alpha'},
-        {id: 3, label: 'Checkpoint Bravo'},
-        {id: 4, label: 'Ruined Bridge'},
-        {id: 5, label: 'Refugee Camp', color: '#2ecc71'}
-    ]);
-    let edges = new vis.DataSet([
-        {from: 1, to: 2, label: '10'}, {from: 1, to: 3, label: '15'},
-        {from: 2, to: 5, label: '30'}, {from: 2, to: 4, label: '10'},
-        {from: 3, to: 4, label: '5'},  {from: 4, to: 5, label: '12'}
-    ]);
-    let network = new vis.Network(document.getElementById('network'), {nodes, edges}, {physics: false});
-
+    // Global Variables
+    let nodes = new vis.DataSet([]);
+    let edges = new vis.DataSet([]);
+    let network = new vis.Network(document.getElementById('network'), {nodes, edges}, {physics: {stabilization: true}});
+    let currentBackendGraph = {};
     let supplyChartInstance = null;
     let riskChartInstance = null;
+
+    // Procedural Graph Generator
+    function generateRandomMap() {
+        nodes.clear();
+        edges.clear();
+        currentBackendGraph = {};
+
+        const numNodes = Math.floor(Math.random() * 4) + 5; // 5 to 8 total nodes
+        let generatedNodes = [];
+        let generatedEdges = [];
+
+        // 1. Create Nodes
+        generatedNodes.push({id: 1, label: 'Basecamp', color: '#3498db'});
+        currentBackendGraph['Basecamp'] = {};
+
+        for(let i = 2; i < numNodes; i++) {
+            let name = 'Zone ' + String.fromCharCode(63 + i); // Zone A, Zone B...
+            generatedNodes.push({id: i, label: name});
+            currentBackendGraph[name] = {};
+        }
+
+        generatedNodes.push({id: numNodes, label: 'Refugee Camp', color: '#2ecc71'});
+        currentBackendGraph['Refugee Camp'] = {};
+
+        // 2. Create Random Forward Edges (DAG to prevent infinite loops)
+        for(let i = 1; i < numNodes; i++) {
+            // Basecamp gets 2 paths minimum to branch out, others get 1 or 2
+            let numOutbound = (i === 1) ? 2 : Math.floor(Math.random() * 2) + 1; 
+            let targets = [];
+            
+            for(let e = 0; e < numOutbound; e++) {
+                // Pick a target strictly forward in the chain
+                let targetId = i + Math.floor(Math.random() * (numNodes - i)) + 1;
+                if(targetId > numNodes) targetId = numNodes; 
+                
+                if(!targets.includes(targetId)) {
+                    targets.push(targetId);
+                    let weight = Math.floor(Math.random() * 25) + 5; // Danger score 5 to 30
+                    generatedEdges.push({id: `${i}-${targetId}`, from: i, to: targetId, label: weight.toString()});
+                    
+                    let fromName = generatedNodes[i-1].label;
+                    let toName = generatedNodes[targetId-1].label;
+                    currentBackendGraph[fromName][toName] = weight;
+                }
+            }
+        }
+
+        // Failsafe: Ensure the node right before the end connects to the end
+        let lastZoneName = generatedNodes[numNodes-2].label;
+        if(Object.keys(currentBackendGraph[lastZoneName]).length === 0) {
+            let weight = Math.floor(Math.random() * 20) + 10;
+            generatedEdges.push({id: `failsafe`, from: numNodes-1, to: numNodes, label: weight.toString()});
+            currentBackendGraph[lastZoneName]['Refugee Camp'] = weight;
+        }
+
+        // Update Vis.js
+        nodes.add(generatedNodes);
+        edges.add(generatedEdges);
+        
+        // Reset charts/UI
+        document.getElementById('sim-results').style.display = 'none';
+        if(supplyChartInstance) supplyChartInstance.destroy();
+        if(riskChartInstance) riskChartInstance.destroy();
+    }
 
     function runSim() {
         const payload = {
@@ -85,13 +146,7 @@
                 {name: "MRE Rations", weight: 25, volume: 15, value: 85},
                 {name: "Antibiotics", weight: 5, volume: 5, value: 95}
             ],
-            graph: {
-                'Basecamp': {'Checkpoint Alpha': 10, 'Checkpoint Bravo': 15},
-                'Checkpoint Alpha': {'Refugee Camp': 30, 'Ruined Bridge': 10},
-                'Checkpoint Bravo': {'Ruined Bridge': 5},
-                'Ruined Bridge': {'Refugee Camp': 12},
-                'Refugee Camp': {}
-            },
+            graph: currentBackendGraph,
             start: 'Basecamp',
             end: 'Refugee Camp'
         };
@@ -113,11 +168,22 @@
         alertBox.innerHTML = `<strong>Optimal Route:</strong> ${data.route_plan.path.join(' ➔ ')} <br>
                               <strong>Probability of Survival:</strong> ${data.route_plan.success_prob}%`;
 
+        // Reset edge colors, then highlight the chosen path in red
         edges.forEach(edge => {
             let fromLabel = nodes.get(edge.from).label;
             let toLabel = nodes.get(edge.to).label;
-            if(data.route_plan.path.includes(fromLabel) && data.route_plan.path.includes(toLabel)) {
-                edges.update({id: edge.id, color: {color: '#e74c3c'}, width: 3});
+            
+            // Check if this specific edge connects two nodes that are sequential in the chosen path
+            let highlight = false;
+            for(let i=0; i < data.route_plan.path.length - 1; i++) {
+                if(data.route_plan.path[i] === fromLabel && data.route_plan.path[i+1] === toLabel) {
+                    highlight = true;
+                    break;
+                }
+            }
+            
+            if(highlight) {
+                edges.update({id: edge.id, color: {color: '#e74c3c'}, width: 4});
             } else {
                 edges.update({id: edge.id, color: {color: '#848484'}, width: 1});
             }
@@ -141,6 +207,11 @@
             options: { scales: { y: { beginAtZero: true } } }
         });
     }
+
+    // Initialize the first random map when the page loads
+    window.onload = function() {
+        generateRandomMap();
+    };
 </script>
 </body>
 </html>
