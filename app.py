@@ -17,7 +17,7 @@ def knapsack(cap, items):
             else:
                 dp[i][j] = dp[i-1][j]
                 
-    # figure out which items we actually took
+    # figure out which items
     res = []
     curr_w = cap
     for i in range(n, 0, -1):
