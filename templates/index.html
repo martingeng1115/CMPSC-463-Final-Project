@@ -17,6 +17,7 @@
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; font-size: 14px;}
         .alert { background: #ffeaa7; padding: 10px; border-radius: 4px; border-left: 4px solid #fdcb6e; margin-bottom: 15px;}
+        input { border: 1px solid #ccc; border-radius: 4px; }
     </style>
 </head>
 <body>
@@ -32,6 +33,20 @@
 </div>
 
 <div class="grid-container">
+    <div class="card" style="grid-column: 1 / -1;">
+        <h3>Configure Custom Payload</h3>
+        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+            <input type="text" id="itemName" placeholder="Item Name (e.g. Generators)" style="flex: 1; padding: 8px;">
+            <input type="number" id="itemWeight" placeholder="Weight" style="width: 80px; padding: 8px;">
+            <input type="number" id="itemVolume" placeholder="Volume" style="width: 80px; padding: 8px;">
+            <input type="number" id="itemValue" placeholder="Value" style="width: 80px; padding: 8px;">
+            <button class="secondary" onclick="addSupplyItem()" style="width: auto; padding: 8px 15px;">+ Add Supply</button>
+        </div>
+        <div style="font-size: 14px; background: #eee; padding: 10px; border-radius: 4px;">
+            <strong>Current Cargo Roster:</strong> <span id="supplyListUI"></span>
+        </div>
+    </div>
+
     <div class="card">
         <h3>Interactive Conflict Zone Map</h3>
         <p style="font-size: 12px; color: #7f8c8d;">Drag nodes to reposition. Edge weights represent base danger levels.</p>
@@ -51,42 +66,70 @@
 
     <div class="card">
         <h3>Recent Deployments (DB Log)</h3>
-        <table>
+        <table id="dbLogTable">
             <tr><th>Date</th><th>Route</th><th>Sim Risk</th><th>Payload Value</th></tr>
             {% for row in history %}
             <tr><td>{{ row[1] }}</td><td>{{ row[2] }}</td><td>{{ row[3] }}</td><td>{{ row[4] }}</td></tr>
             {% else %}
-            <tr><td colspan="4">No previous data. Run a simulation.</td></tr>
+            <tr><td colspan="4" id="noDataRow">No previous data. Run a simulation.</td></tr>
             {% endfor %}
         </table>
     </div>
 </div>
 
 <script>
-    // Global Variables
     let nodes = new vis.DataSet([]);
     let edges = new vis.DataSet([]);
     let network = new vis.Network(document.getElementById('network'), {nodes, edges}, {physics: {stabilization: true}});
     let currentBackendGraph = {};
     let supplyChartInstance = null;
     let riskChartInstance = null;
+    
+    let activeSupplies = [
+        {name: "Trauma Kits", weight: 20, volume: 15, value: 100},
+        {name: "Water Pallets", weight: 30, volume: 20, value: 80},
+        {name: "Thermal Blankets", weight: 10, volume: 25, value: 50},
+        {name: "MRE Rations", weight: 25, volume: 15, value: 85},
+        {name: "Antibiotics", weight: 5, volume: 5, value: 95}
+    ];
 
-    // Procedural Graph Generator
+    function renderSupplies() {
+        let listStr = activeSupplies.map(s => `${s.name} (W:${s.weight}, V:${s.volume}, Val:${s.value})`).join(' | ');
+        document.getElementById('supplyListUI').innerText = listStr;
+    }
+
+    function addSupplyItem() {
+        let name = document.getElementById('itemName').value;
+        let weight = parseInt(document.getElementById('itemWeight').value);
+        let volume = parseInt(document.getElementById('itemVolume').value);
+        let value = parseInt(document.getElementById('itemValue').value);
+
+        if(name && !isNaN(weight) && !isNaN(volume) && !isNaN(value)) {
+            activeSupplies.push({name, weight, volume, value});
+            renderSupplies();
+            document.getElementById('itemName').value = '';
+            document.getElementById('itemWeight').value = '';
+            document.getElementById('itemVolume').value = '';
+            document.getElementById('itemValue').value = '';
+        } else {
+            alert("Please fill in all fields with valid numbers.");
+        }
+    }
+
     function generateRandomMap() {
         nodes.clear();
         edges.clear();
         currentBackendGraph = {};
 
-        const numNodes = Math.floor(Math.random() * 4) + 5; // 5 to 8 total nodes
+        const numNodes = Math.floor(Math.random() * 4) + 5; 
         let generatedNodes = [];
         let generatedEdges = [];
 
-        // 1. Create Nodes
         generatedNodes.push({id: 1, label: 'Basecamp', color: '#3498db'});
         currentBackendGraph['Basecamp'] = {};
 
         for(let i = 2; i < numNodes; i++) {
-            let name = 'Zone ' + String.fromCharCode(63 + i); // Zone A, Zone B...
+            let name = 'Zone ' + String.fromCharCode(63 + i); 
             generatedNodes.push({id: i, label: name});
             currentBackendGraph[name] = {};
         }
@@ -94,20 +137,17 @@
         generatedNodes.push({id: numNodes, label: 'Refugee Camp', color: '#2ecc71'});
         currentBackendGraph['Refugee Camp'] = {};
 
-        // 2. Create Random Forward Edges (DAG to prevent infinite loops)
         for(let i = 1; i < numNodes; i++) {
-            // Basecamp gets 2 paths minimum to branch out, others get 1 or 2
             let numOutbound = (i === 1) ? 2 : Math.floor(Math.random() * 2) + 1; 
             let targets = [];
             
             for(let e = 0; e < numOutbound; e++) {
-                // Pick a target strictly forward in the chain
                 let targetId = i + Math.floor(Math.random() * (numNodes - i)) + 1;
                 if(targetId > numNodes) targetId = numNodes; 
                 
                 if(!targets.includes(targetId)) {
                     targets.push(targetId);
-                    let weight = Math.floor(Math.random() * 25) + 5; // Danger score 5 to 30
+                    let weight = Math.floor(Math.random() * 25) + 5; 
                     generatedEdges.push({id: `${i}-${targetId}`, from: i, to: targetId, label: weight.toString()});
                     
                     let fromName = generatedNodes[i-1].label;
@@ -117,7 +157,6 @@
             }
         }
 
-        // Failsafe: Ensure the node right before the end connects to the end
         let lastZoneName = generatedNodes[numNodes-2].label;
         if(Object.keys(currentBackendGraph[lastZoneName]).length === 0) {
             let weight = Math.floor(Math.random() * 20) + 10;
@@ -125,27 +164,24 @@
             currentBackendGraph[lastZoneName]['Refugee Camp'] = weight;
         }
 
-        // Update Vis.js
         nodes.add(generatedNodes);
         edges.add(generatedEdges);
         
-        // Reset charts/UI
         document.getElementById('sim-results').style.display = 'none';
         if(supplyChartInstance) supplyChartInstance.destroy();
         if(riskChartInstance) riskChartInstance.destroy();
     }
 
     function runSim() {
+        if(activeSupplies.length === 0) {
+            alert("Cargo is empty! Please add at least one item.");
+            return;
+        }
+
         const payload = {
             weight_cap: 50,
             volume_cap: 40,
-            supplies: [
-                {name: "Trauma Kits", weight: 20, volume: 15, value: 100},
-                {name: "Water Pallets", weight: 30, volume: 20, value: 80},
-                {name: "Thermal Blankets", weight: 10, volume: 25, value: 50},
-                {name: "MRE Rations", weight: 25, volume: 15, value: 85},
-                {name: "Antibiotics", weight: 5, volume: 5, value: 95}
-            ],
+            supplies: activeSupplies,
             graph: currentBackendGraph,
             start: 'Basecamp',
             end: 'Refugee Camp'
@@ -168,12 +204,10 @@
         alertBox.innerHTML = `<strong>Optimal Route:</strong> ${data.route_plan.path.join(' ➔ ')} <br>
                               <strong>Probability of Survival:</strong> ${data.route_plan.success_prob}%`;
 
-        // Reset edge colors, then highlight the chosen path in red
         edges.forEach(edge => {
             let fromLabel = nodes.get(edge.from).label;
             let toLabel = nodes.get(edge.to).label;
             
-            // Check if this specific edge connects two nodes that are sequential in the chosen path
             let highlight = false;
             for(let i=0; i < data.route_plan.path.length - 1; i++) {
                 if(data.route_plan.path[i] === fromLabel && data.route_plan.path[i+1] === toLabel) {
@@ -206,10 +240,23 @@
             },
             options: { scales: { y: { beginAtZero: true } } }
         });
+
+        if(data.new_log) {
+            let table = document.getElementById('dbLogTable');
+            let noDataRow = document.getElementById('noDataRow');
+            if(noDataRow) noDataRow.remove();
+
+            let newRow = table.insertRow(1);
+            newRow.innerHTML = `<td>${data.new_log.date}</td><td>${data.new_log.route}</td><td>${data.new_log.risk}</td><td>${data.new_log.payload_value}</td>`;
+            
+            if(table.rows.length > 6) {
+                table.deleteRow(6);
+            }
+        }
     }
 
-    // Initialize the first random map when the page loads
     window.onload = function() {
+        renderSupplies();
         generateRandomMap();
     };
 </script>
