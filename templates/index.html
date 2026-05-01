@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>CrisisRoute | Advanced Logistics</title>
+    <title>OptimFlow | Advanced Logistics & Supply Optimization</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
     <style>
@@ -10,24 +10,24 @@
         .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
         h1, h2, h3 { color: #2c3e50; margin-top: 0;}
         .btn-group { display: flex; gap: 10px; margin-bottom: 20px; }
-        button { background: #e74c3c; color: white; border: none; padding: 12px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; width: 100%; transition: 0.3s; font-weight: bold;}
+        button { background: #3498db; color: white; border: none; padding: 12px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; width: 100%; transition: 0.3s; font-weight: bold;}
         button.secondary { background: #34495e; }
         button:hover { filter: brightness(1.1); }
         #network { width: 100%; height: 300px; border: 1px solid #ddd; background: #fafafa; border-radius: 4px; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; font-size: 14px;}
-        .alert { background: #ffeaa7; padding: 10px; border-radius: 4px; border-left: 4px solid #fdcb6e; margin-bottom: 15px;}
+        .alert { background: #d4edda; padding: 10px; border-radius: 4px; border-left: 4px solid #28a745; margin-bottom: 15px;}
         input { border: 1px solid #ccc; border-radius: 4px; }
     </style>
 </head>
 <body>
 
 <div style="max-width: 1200px; margin: auto;">
-    <h1>CrisisRoute Command Center</h1>
-    <p>Multi-constraint resource allocation and Monte Carlo risk-assessed pathfinding.</p>
+    <h1>OptimFlow Command Center</h1>
+    <p>Multi-constraint resource allocation and Monte Carlo risk-assessed route optimization.</p>
     
     <div class="btn-group">
-        <button class="secondary" onclick="generateRandomMap()">⟳ Generate New Conflict Zone Map</button>
+        <button class="secondary" onclick="generateRandomMap()">⟳ Generate New Network Map</button>
         <button onclick="runSim()">Execute Full System Simulation</button>
     </div>
 </div>
@@ -36,20 +36,20 @@
     <div class="card" style="grid-column: 1 / -1;">
         <h3>Configure Custom Payload</h3>
         <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-            <input type="text" id="itemName" placeholder="Item Name (e.g. Generators)" style="flex: 1; padding: 8px;">
+            <input type="text" id="itemName" placeholder="Item Name (e.g. Equipment)" style="flex: 1; padding: 8px;">
             <input type="number" id="itemWeight" placeholder="Weight" style="width: 80px; padding: 8px;">
             <input type="number" id="itemVolume" placeholder="Volume" style="width: 80px; padding: 8px;">
             <input type="number" id="itemValue" placeholder="Value" style="width: 80px; padding: 8px;">
-            <button class="secondary" onclick="addSupplyItem()" style="width: auto; padding: 8px 15px;">+ Add Supply</button>
+            <button class="secondary" onclick="addSupplyItem()" style="width: auto; padding: 8px 15px;">+ Add Item</button>
         </div>
         <div style="font-size: 14px; background: #eee; padding: 10px; border-radius: 4px;">
-            <strong>Current Cargo Roster:</strong> <span id="supplyListUI"></span>
+            <strong>Current Inventory:</strong> <span id="supplyListUI"></span>
         </div>
     </div>
 
     <div class="card">
-        <h3>Interactive Conflict Zone Map</h3>
-        <p style="font-size: 12px; color: #7f8c8d;">Drag nodes to reposition. Edge weights represent base danger levels.</p>
+        <h3>Interactive Network Map</h3>
+        <p style="font-size: 12px; color: #7f8c8d;">Drag nodes to reposition. Edge weights represent cost/distance metrics.</p>
         <div id="network"></div>
     </div>
 
@@ -65,9 +65,9 @@
     </div>
 
     <div class="card">
-        <h3>Recent Deployments (DB Log)</h3>
+        <h3>Recent Simulations (History)</h3>
         <table id="dbLogTable">
-            <tr><th>Date</th><th>Route</th><th>Sim Risk</th><th>Payload Value</th></tr>
+            <tr><th>Date</th><th>Route</th><th>Sim Cost</th><th>Payload Value</th></tr>
             {% for row in history %}
             <tr><td>{{ row[1] }}</td><td>{{ row[2] }}</td><td>{{ row[3] }}</td><td>{{ row[4] }}</td></tr>
             {% else %}
@@ -86,11 +86,11 @@
     let riskChartInstance = null;
     
     let activeSupplies = [
-        {name: "Trauma Kits", weight: 20, volume: 15, value: 100},
-        {name: "Water Pallets", weight: 30, volume: 20, value: 80},
-        {name: "Thermal Blankets", weight: 10, volume: 25, value: 50},
-        {name: "MRE Rations", weight: 25, volume: 15, value: 85},
-        {name: "Antibiotics", weight: 5, volume: 5, value: 95}
+        {name: "Machinery", weight: 20, volume: 15, value: 100},
+        {name: "Materials", weight: 30, volume: 20, value: 80},
+        {name: "Electronics", weight: 10, volume: 25, value: 50},
+        {name: "Tools", weight: 25, volume: 15, value: 85},
+        {name: "Components", weight: 5, volume: 5, value: 95}
     ];
 
     function renderSupplies() {
@@ -125,17 +125,17 @@
         let generatedNodes = [];
         let generatedEdges = [];
 
-        generatedNodes.push({id: 1, label: 'Basecamp', color: '#3498db'});
-        currentBackendGraph['Basecamp'] = {};
+        generatedNodes.push({id: 1, label: 'Distribution Hub', color: '#3498db'});
+        currentBackendGraph['Distribution Hub'] = {};
 
         for(let i = 2; i < numNodes; i++) {
-            let name = 'Zone ' + String.fromCharCode(63 + i); 
+            let name = 'Location ' + String.fromCharCode(63 + i); 
             generatedNodes.push({id: i, label: name});
             currentBackendGraph[name] = {};
         }
 
-        generatedNodes.push({id: numNodes, label: 'Refugee Camp', color: '#2ecc71'});
-        currentBackendGraph['Refugee Camp'] = {};
+        generatedNodes.push({id: numNodes, label: 'Destination', color: '#2ecc71'});
+        currentBackendGraph['Destination'] = {};
 
         for(let i = 1; i < numNodes; i++) {
             let numOutbound = (i === 1) ? 2 : Math.floor(Math.random() * 2) + 1; 
@@ -161,7 +161,7 @@
         if(Object.keys(currentBackendGraph[lastZoneName]).length === 0) {
             let weight = Math.floor(Math.random() * 20) + 10;
             generatedEdges.push({id: `failsafe`, from: numNodes-1, to: numNodes, label: weight.toString()});
-            currentBackendGraph[lastZoneName]['Refugee Camp'] = weight;
+            currentBackendGraph[lastZoneName]['Destination'] = weight;
         }
 
         nodes.add(generatedNodes);
@@ -174,7 +174,7 @@
 
     function runSim() {
         if(activeSupplies.length === 0) {
-            alert("Cargo is empty! Please add at least one item.");
+            alert("Inventory is empty! Please add at least one item.");
             return;
         }
 
@@ -183,8 +183,8 @@
             volume_cap: 40,
             supplies: activeSupplies,
             graph: currentBackendGraph,
-            start: 'Basecamp',
-            end: 'Refugee Camp'
+            start: 'Distribution Hub',
+            end: 'Destination'
         };
 
         fetch('/api/simulate', {
@@ -202,7 +202,7 @@
         const alertBox = document.getElementById('sim-results');
         alertBox.style.display = 'block';
         alertBox.innerHTML = `<strong>Optimal Route:</strong> ${data.route_plan.path.join(' ➔ ')} <br>
-                              <strong>Probability of Survival:</strong> ${data.route_plan.success_prob}%`;
+                              <strong>Efficiency Score:</strong> ${data.route_plan.success_prob}%`;
 
         edges.forEach(edge => {
             let fromLabel = nodes.get(edge.from).label;
@@ -217,7 +217,7 @@
             }
             
             if(highlight) {
-                edges.update({id: edge.id, color: {color: '#e74c3c'}, width: 4});
+                edges.update({id: edge.id, color: {color: '#3498db'}, width: 4});
             } else {
                 edges.update({id: edge.id, color: {color: '#848484'}, width: 1});
             }
@@ -235,8 +235,8 @@
         riskChartInstance = new Chart(document.getElementById('riskChart'), {
             type: 'bar',
             data: {
-                labels: ['Baseline Risk', 'Simulated Avg Risk (Monte Carlo)'],
-                datasets: [{ label: 'Danger Index', data: [data.route_plan.baseline, data.route_plan.avg_simulated], backgroundColor: ['#2ecc71', '#e74c3c'] }]
+                labels: ['Baseline Cost', 'Simulated Avg Cost (Monte Carlo)'],
+                datasets: [{ label: 'Cost Index', data: [data.route_plan.baseline, data.route_plan.avg_simulated], backgroundColor: ['#2ecc71', '#3498db'] }]
             },
             options: { scales: { y: { beginAtZero: true } } }
         });
