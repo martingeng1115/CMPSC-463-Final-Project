@@ -5,58 +5,102 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
     <style>
+        * { box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
-        .grid-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 1200px; margin: auto; }
+        .grid-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 1400px; margin: auto; }
         .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
         h1, h2, h3 { color: #2c3e50; margin-top: 0;}
-        .btn-group { display: flex; gap: 10px; margin-bottom: 20px; }
-        button { background: #3498db; color: white; border: none; padding: 12px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; width: 100%; transition: 0.3s; font-weight: bold;}
+        .btn-group { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        button { background: #3498db; color: white; border: none; padding: 12px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; transition: 0.3s; font-weight: bold; flex: 1; min-width: 150px; }
         button.secondary { background: #34495e; }
+        button.danger { background: #e74c3c; }
+        button.success { background: #27ae60; }
         button:hover { filter: brightness(1.1); }
-        #network { width: 100%; height: 300px; border: 1px solid #ddd; background: #fafafa; border-radius: 4px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; font-size: 14px;}
-        .alert { background: #d4edda; padding: 10px; border-radius: 4px; border-left: 4px solid #28a745; margin-bottom: 15px;}
-        input { border: 1px solid #ccc; border-radius: 4px; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        #network { width: 100%; height: 400px; border: 1px solid #ddd; background: #fafafa; border-radius: 4px; cursor: crosshair; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+        th, td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background: #ecf0f1; font-weight: bold; }
+        .alert { background: #d4edda; padding: 10px; border-radius: 4px; border-left: 4px solid #28a745; margin-bottom: 15px; }
+        .alert.warning { background: #fff3cd; border-left-color: #ffc107; }
+        .alert.error { background: #f8d7da; border-left-color: #dc3545; }
+        input { border: 1px solid #ccc; border-radius: 4px; padding: 8px; }
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); }
+        .modal.show { display: block; }
+        .modal-content { background: white; margin: 10% auto; padding: 20px; border-radius: 8px; width: 400px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .close:hover { color: black; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+        .stat-box { background: #ecf0f1; padding: 10px; border-radius: 4px; text-align: center; }
+        .stat-box strong { display: block; color: #2c3e50; }
+        .stat-box .value { font-size: 18px; color: #3498db; font-weight: bold; }
+        .tab-buttons { display: flex; gap: 5px; margin-bottom: 15px; }
+        .tab-buttons button { flex: 0 1 auto; padding: 8px 12px; font-size: 14px; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        small { color: #7f8c8d; display: block; margin-top: 5px; }
     </style>
 </head>
 <body>
 
-<div style="max-width: 1200px; margin: auto;">
+<div style="max-width: 1400px; margin: auto;">
     <h1>OptimFlow Command Center</h1>
     <p>Multi-constraint resource allocation and Monte Carlo risk-assessed route optimization.</p>
     
     <div class="btn-group">
         <button class="secondary" onclick="generateRandomMap()">⟳ Generate New Network Map</button>
+        <button class="secondary" onclick="showNetworkModal()">✏️ Edit Network Manually</button>
         <button onclick="runSim()">Execute Full System Simulation</button>
+        <button class="success" onclick="exportCSV()">📥 Export as CSV</button>
+        <button class="secondary" onclick="showStatistics()">📊 View Statistics</button>
     </div>
 </div>
 
 <div class="grid-container">
     <div class="card" style="grid-column: 1 / -1;">
-        <h3>Configure Custom Payload</h3>
-        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-            <input type="text" id="itemName" placeholder="Item Name (e.g. Equipment)" style="flex: 1; padding: 8px;">
-            <input type="number" id="itemWeight" placeholder="Weight" style="width: 80px; padding: 8px;">
-            <input type="number" id="itemVolume" placeholder="Volume" style="width: 80px; padding: 8px;">
-            <input type="number" id="itemValue" placeholder="Value" style="width: 80px; padding: 8px;">
-            <button class="secondary" onclick="addSupplyItem()" style="width: auto; padding: 8px 15px;">+ Add Item</button>
+        <div class="tab-buttons">
+            <button class="secondary" onclick="switchTab('supplies')">Payload Configuration</button>
+            <button class="secondary" onclick="switchTab('presets')">Presets</button>
         </div>
-        <div style="font-size: 14px; background: #eee; padding: 10px; border-radius: 4px;">
-            <strong>Current Inventory:</strong> <span id="supplyListUI"></span>
+        
+        <div id="supplies-tab" class="tab-content active">
+            <h3>Configure Custom Payload</h3>
+            <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
+                <input type="text" id="itemName" placeholder="Item Name (e.g. Equipment)" style="flex: 1; min-width: 150px; padding: 8px;">
+                <input type="number" id="itemWeight" placeholder="Weight" style="width: 80px; padding: 8px;">
+                <input type="number" id="itemVolume" placeholder="Volume" style="width: 80px; padding: 8px;">
+                <input type="number" id="itemValue" placeholder="Value" style="width: 80px; padding: 8px;">
+                <button class="secondary" onclick="addSupplyItem()" style="flex: 0 1 auto; width: auto; padding: 8px 15px;">+ Add</button>
+                <button class="danger" onclick="clearAllSupplies()" style="flex: 0 1 auto; width: auto; padding: 8px 15px;">Clear All</button>
+            </div>
+            <div style="font-size: 14px; background: #eee; padding: 10px; border-radius: 4px; max-height: 100px; overflow-y: auto;">
+                <strong>Current Inventory:</strong> <span id="supplyListUI"></span>
+            </div>
+            <small>Weight Cap: 50 | Volume Cap: 40</small>
+        </div>
+        
+        <div id="presets-tab" class="tab-content">
+            <h3>Quick Presets</h3>
+            <button class="secondary" onclick="loadPreset('light')" style="width: 100%; margin-bottom: 8px;">📦 Light Load (Low Cost)</button>
+            <button class="secondary" onclick="loadPreset('medium')" style="width: 100%; margin-bottom: 8px;">📦📦 Medium Load (Balanced)</button>
+            <button class="secondary" onclick="loadPreset('heavy')" style="width: 100%; margin-bottom: 8px;">📦📦📦 Heavy Load (Max Value)</button>
         </div>
     </div>
 
     <div class="card">
         <h3>Interactive Network Map</h3>
-        <p style="font-size: 12px; color: #7f8c8d;">Drag nodes to reposition. Edge weights represent cost/distance metrics.</p>
+        <p style="font-size: 12px; color: #7f8c8d;">Drag nodes to reposition. Edge weights = cost. Highlighted route appears in red.</p>
         <div id="network"></div>
     </div>
 
     <div class="card">
-        <h3>Monte Carlo Risk Analysis</h3>
+        <h3>Cost Analysis & Breakdown</h3>
         <div id="sim-results" class="alert" style="display:none;"></div>
-        <canvas id="riskChart" height="150"></canvas>
+        <canvas id="costBreakdownChart" height="150"></canvas>
+        <table id="costBreakdownTable" style="margin-top: 10px; display: none;">
+            <tr><th>From</th><th>To</th><th>Cost</th></tr>
+            <tbody id="costBreakdownBody"></tbody>
+        </table>
     </div>
 
     <div class="card">
@@ -66,14 +110,50 @@
 
     <div class="card">
         <h3>Recent Simulations (History)</h3>
+        <button class="danger" onclick="clearHistory()" style="width: 100%; margin-bottom: 10px; font-size: 14px;">🗑️ Clear History</button>
         <table id="dbLogTable">
-            <tr><th>Date</th><th>Route</th><th>Sim Cost</th><th>Payload Value</th></tr>
+            <tr><th>Date</th><th>Route</th><th>Cost</th><th>Value</th></tr>
             {% for row in history %}
-            <tr><td>{{ row[1] }}</td><td>{{ row[2] }}</td><td>{{ row[3] }}</td><td>{{ row[4] }}</td></tr>
+            <tr><td>{{ row[1] }}</td><td style="font-size: 12px;">{{ row[2] }}</td><td>{{ row[3] }}</td><td>{{ row[4] }}</td></tr>
             {% else %}
             <tr><td colspan="4" id="noDataRow">No previous data. Run a simulation.</td></tr>
             {% endfor %}
         </table>
+    </div>
+
+    <div class="card">
+        <h3>Monte Carlo Risk Distribution</h3>
+        <canvas id="riskChart" height="150"></canvas>
+    </div>
+</div>
+
+<!-- Network Edit Modal -->
+<div id="networkModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeNetworkModal()">&times;</span>
+        <h3>Manually Edit Network</h3>
+        <div style="margin-bottom: 10px;">
+            <label>Add New Node:</label>
+            <input type="text" id="newNodeName" placeholder="Node name" style="width: 100%; margin-bottom: 8px;">
+            <button onclick="addNode()" style="width: 100%;">Add Node</button>
+        </div>
+        <div style="margin-bottom: 10px;">
+            <label>Add Edge (Connection):</label>
+            <select id="fromNode" style="width: 100%; margin-bottom: 5px;"><option>Select From Node</option></select>
+            <select id="toNode" style="width: 100%; margin-bottom: 5px;"><option>Select To Node</option></select>
+            <input type="number" id="edgeCost" placeholder="Cost/Weight" style="width: 100%; margin-bottom: 8px;">
+            <button onclick="addEdge()" style="width: 100%;">Add Edge</button>
+        </div>
+        <div id="nodeList" style="max-height: 200px; overflow-y: auto; background: #ecf0f1; padding: 10px; border-radius: 4px;"></div>
+    </div>
+</div>
+
+<!-- Statistics Modal -->
+<div id="statsModal" class="modal">
+    <div class="modal-content" style="width: 500px;">
+        <span class="close" onclick="closeStatsModal()">&times;</span>
+        <h3>Simulation Statistics</h3>
+        <div id="statsContent" class="stats-grid"></div>
     </div>
 </div>
 
@@ -84,6 +164,8 @@
     let currentBackendGraph = {};
     let supplyChartInstance = null;
     let riskChartInstance = null;
+    let costBreakdownChartInstance = null;
+    let lastSimulationData = null;
     
     let activeSupplies = [
         {name: "Machinery", weight: 20, volume: 15, value: 100},
@@ -92,10 +174,39 @@
         {name: "Tools", weight: 25, volume: 15, value: 85},
         {name: "Components", weight: 5, volume: 5, value: 95}
     ];
+    
+    const PRESETS = {
+        light: [
+            {name: "Components", weight: 5, volume: 5, value: 95},
+            {name: "Electronics", weight: 10, volume: 25, value: 50}
+        ],
+        medium: [
+            {name: "Machinery", weight: 20, volume: 15, value: 100},
+            {name: "Materials", weight: 30, volume: 20, value: 80}
+        ],
+        heavy: [
+            {name: "Machinery", weight: 20, volume: 15, value: 100},
+            {name: "Materials", weight: 30, volume: 20, value: 80},
+            {name: "Electronics", weight: 10, volume: 25, value: 50},
+            {name: "Tools", weight: 25, volume: 15, value: 85},
+            {name: "Components", weight: 5, volume: 5, value: 95}
+        ]
+    };
+
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+        document.getElementById(tabName + '-tab').classList.add('active');
+    }
+
+    function loadPreset(presetName) {
+        activeSupplies = JSON.parse(JSON.stringify(PRESETS[presetName]));
+        renderSupplies();
+        alert(`Loaded ${presetName.toUpperCase()} preset!`);
+    }
 
     function renderSupplies() {
         let listStr = activeSupplies.map(s => `${s.name} (W:${s.weight}, V:${s.volume}, Val:${s.value})`).join(' | ');
-        document.getElementById('supplyListUI').innerText = listStr;
+        document.getElementById('supplyListUI').innerText = listStr || "No items in inventory";
     }
 
     function addSupplyItem() {
@@ -114,6 +225,127 @@
         } else {
             alert("Please fill in all fields with valid numbers.");
         }
+    }
+
+    function clearAllSupplies() {
+        if(confirm("Clear all items from inventory?")) {
+            activeSupplies = [];
+            renderSupplies();
+        }
+    }
+
+    function clearHistory() {
+        if(confirm("Permanently delete all simulation history?")) {
+            fetch('/api/delete-history', {method: 'POST'})
+                .then(res => res.json())
+                .then(data => {
+                    alert("History cleared!");
+                    location.reload();
+                });
+        }
+    }
+
+    function showNetworkModal() {
+        document.getElementById('networkModal').classList.add('show');
+        updateNodeSelects();
+        updateNodeList();
+    }
+
+    function closeNetworkModal() {
+        document.getElementById('networkModal').classList.remove('show');
+    }
+
+    function updateNodeSelects() {
+        let nodeLabels = Array.from(nodes.get()).map(n => n.label);
+        let fromSelect = document.getElementById('fromNode');
+        let toSelect = document.getElementById('toNode');
+        
+        fromSelect.innerHTML = '<option>Select From Node</option>';
+        toSelect.innerHTML = '<option>Select To Node</option>';
+        
+        nodeLabels.forEach(label => {
+            fromSelect.innerHTML += `<option>${label}</option>`;
+            toSelect.innerHTML += `<option>${label}</option>`;
+        });
+    }
+
+    function updateNodeList() {
+        let nodeList = Array.from(nodes.get()).map(n => n.label);
+        document.getElementById('nodeList').innerHTML = '<strong>Current Nodes:</strong><br>' + nodeList.join(', ');
+    }
+
+    function addNode() {
+        let nodeName = document.getElementById('newNodeName').value;
+        if(!nodeName) { alert("Enter a node name"); return; }
+        
+        let newId = Math.max(...Array.from(nodes.get()).map(n => n.id), 0) + 1;
+        nodes.add({id: newId, label: nodeName});
+        currentBackendGraph[nodeName] = {};
+        
+        document.getElementById('newNodeName').value = '';
+        updateNodeSelects();
+        updateNodeList();
+    }
+
+    function addEdge() {
+        let fromNode = document.getElementById('fromNode').value;
+        let toNode = document.getElementById('toNode').value;
+        let cost = parseInt(document.getElementById('edgeCost').value);
+        
+        if(fromNode === 'Select From Node' || toNode === 'Select To Node' || isNaN(cost)) {
+            alert("Select valid nodes and cost");
+            return;
+        }
+        
+        let fromId = Array.from(nodes.get()).find(n => n.label === fromNode).id;
+        let toId = Array.from(nodes.get()).find(n => n.label === toNode).id;
+        
+        edges.add({id: `${fromId}-${toId}`, from: fromId, to: toId, label: cost.toString()});
+        currentBackendGraph[fromNode][toNode] = cost;
+        
+        document.getElementById('edgeCost').value = '';
+        alert("Edge added!");
+    }
+
+    function showStatistics() {
+        fetch('/api/statistics')
+            .then(res => res.json())
+            .then(data => {
+                if(data.error) {
+                    alert("No simulation data yet!");
+                    return;
+                }
+                let html = `
+                    <div class="stat-box"><strong>Min Cost</strong><span class="value">${data.min_cost}</span></div>
+                    <div class="stat-box"><strong>Max Cost</strong><span class="value">${data.max_cost}</span></div>
+                    <div class="stat-box"><strong>Avg Cost</strong><span class="value">${data.avg_cost}</span></div>
+                    <div class="stat-box"><strong>Median Cost</strong><span class="value">${data.median_cost}</span></div>
+                    <div class="stat-box"><strong>Min Value</strong><span class="value">${data.min_value}</span></div>
+                    <div class="stat-box"><strong>Max Value</strong><span class="value">${data.max_value}</span></div>
+                    <div class="stat-box"><strong>Avg Value</strong><span class="value">${data.avg_value}</span></div>
+                    <div class="stat-box"><strong>Total Runs</strong><span class="value">${data.total_simulations}</span></div>
+                `;
+                document.getElementById('statsContent').innerHTML = html;
+                document.getElementById('statsModal').classList.add('show');
+            });
+    }
+
+    function closeStatsModal() {
+        document.getElementById('statsModal').classList.remove('show');
+    }
+
+    function exportCSV() {
+        fetch('/api/export-csv')
+            .then(res => res.text())
+            .then(csv => {
+                let element = document.createElement('a');
+                element.setAttribute('href', 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv));
+                element.setAttribute('download', 'OptimFlow_Report.csv');
+                element.style.display = 'none';
+                document.body.appendChild(element);
+                element.click();
+                document.body.removeChild(element);
+            });
     }
 
     function generateRandomMap() {
@@ -170,6 +402,7 @@
         document.getElementById('sim-results').style.display = 'none';
         if(supplyChartInstance) supplyChartInstance.destroy();
         if(riskChartInstance) riskChartInstance.destroy();
+        if(costBreakdownChartInstance) costBreakdownChartInstance.destroy();
     }
 
     function runSim() {
@@ -187,14 +420,28 @@
             end: 'Destination'
         };
 
-        fetch('/api/simulate', {
+        fetch('/api/validate-network', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)
         })
         .then(res => res.json())
-        .then(data => {
-            updateDashboard(data);
+        .then(validation => {
+            if(!validation.valid) {
+                alert("Network Error: " + validation.message);
+                return;
+            }
+            
+            fetch('/api/simulate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(data => {
+                lastSimulationData = data;
+                updateDashboard(data);
+            });
         });
     }
 
@@ -202,8 +449,9 @@
         const alertBox = document.getElementById('sim-results');
         alertBox.style.display = 'block';
         alertBox.innerHTML = `<strong>Optimal Route:</strong> ${data.route_plan.path.join(' ➔ ')} <br>
-                              <strong>Efficiency Score:</strong> ${data.route_plan.success_prob}%`;
+                              <strong>Baseline Cost:</strong> ${data.route_plan.baseline} | <strong>Simulated Avg Cost:</strong> ${data.route_plan.avg_simulated} | <strong>Efficiency Score:</strong> ${data.route_plan.success_prob}%`;
 
+        // Highlight route on network
         edges.forEach(edge => {
             let fromLabel = nodes.get(edge.from).label;
             let toLabel = nodes.get(edge.to).label;
@@ -217,20 +465,44 @@
             }
             
             if(highlight) {
-                edges.update({id: edge.id, color: {color: '#3498db'}, width: 4});
+                edges.update({id: edge.id, color: {color: '#e74c3c'}, width: 4});
             } else {
                 edges.update({id: edge.id, color: {color: '#848484'}, width: 1});
             }
         });
 
+        // Cost Breakdown Chart
+        let breakdownLabels = data.route_plan.cost_breakdown.map(e => `${e.from.substring(0,8)}→${e.to.substring(0,8)}`);
+        let breakdownValues = data.route_plan.cost_breakdown.map(e => e.cost);
+        
+        if(costBreakdownChartInstance) costBreakdownChartInstance.destroy();
+        costBreakdownChartInstance = new Chart(document.getElementById('costBreakdownChart'), {
+            type: 'bar',
+            data: {
+                labels: breakdownLabels,
+                datasets: [{ label: 'Cost per Edge', data: breakdownValues, backgroundColor: '#3498db' }]
+            },
+            options: { indexAxis: 'y', scales: { x: { beginAtZero: true } } }
+        });
+
+        // Cost Breakdown Table
+        let tableBody = document.getElementById('costBreakdownBody');
+        tableBody.innerHTML = '';
+        data.route_plan.cost_breakdown.forEach(edge => {
+            tableBody.innerHTML += `<tr><td>${edge.from}</td><td>${edge.to}</td><td>${edge.cost}</td></tr>`;
+        });
+        document.getElementById('costBreakdownTable').style.display = 'table';
+
+        // Supply Chart
         let labels = data.supply_plan.selected.map(i => i.name);
         let values = data.supply_plan.selected.map(i => i.value);
         if(supplyChartInstance) supplyChartInstance.destroy();
         supplyChartInstance = new Chart(document.getElementById('supplyChart'), {
             type: 'doughnut',
-            data: { labels: labels, datasets: [{ data: values, backgroundColor: ['#3498db', '#9b59b6', '#f1c40f', '#1abc9c'] }] }
+            data: { labels: labels, datasets: [{ data: values, backgroundColor: ['#3498db', '#9b59b6', '#f1c40f', '#1abc9c', '#e74c3c'] }] }
         });
 
+        // Risk Distribution Chart
         if(riskChartInstance) riskChartInstance.destroy();
         riskChartInstance = new Chart(document.getElementById('riskChart'), {
             type: 'bar',
@@ -247,7 +519,7 @@
             if(noDataRow) noDataRow.remove();
 
             let newRow = table.insertRow(1);
-            newRow.innerHTML = `<td>${data.new_log.date}</td><td>${data.new_log.route}</td><td>${data.new_log.risk}</td><td>${data.new_log.payload_value}</td>`;
+            newRow.innerHTML = `<td>${data.new_log.date}</td><td style="font-size: 12px;">${data.new_log.route}</td><td>${data.new_log.risk}</td><td>${data.new_log.payload_value}</td>`;
             
             if(table.rows.length > 6) {
                 table.deleteRow(6);
@@ -259,6 +531,13 @@
         renderSupplies();
         generateRandomMap();
     };
+
+    window.onclick = function(event) {
+        let networkModal = document.getElementById('networkModal');
+        let statsModal = document.getElementById('statsModal');
+        if(event.target === networkModal) networkModal.classList.remove('show');
+        if(event.target === statsModal) statsModal.classList.remove('show');
+    }
 </script>
 </body>
 </html>
