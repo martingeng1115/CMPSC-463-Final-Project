@@ -7,10 +7,10 @@ import numpy as np
 app = Flask(__name__)
 
 def init_db():
-    conn = sqlite3.connect('crisis_logs.db')
+    conn = sqlite3.connect('optim_flow.db')
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS simulations 
-                 (id INTEGER PRIMARY KEY, date TEXT, route TEXT, risk REAL, payload_value INTEGER)''')
+                 (id INTEGER PRIMARY KEY, date TEXT, route TEXT, cost REAL, payload_value INTEGER)''')
     conn.commit()
     conn.close()
 
@@ -71,25 +71,25 @@ def get_route_and_sim(graph, start, end):
     if path: 
         path.insert(0, curr)
     
-    baseline_risk = dist[end]
+    baseline_cost = dist[end]
 
-    simulated_risks = []
+    simulated_costs = []
     for _ in range(1000):
-        sim_risk = 0
+        sim_cost = 0
         for i in range(len(path)-1):
             base_edge = graph[path[i]][path[i+1]]
             fluctuation = np.random.uniform(0.8, 2.5) 
-            sim_risk += (base_edge * fluctuation)
-        simulated_risks.append(sim_risk)
+            sim_cost += (base_edge * fluctuation)
+        simulated_costs.append(sim_cost)
         
-    avg_sim_risk = round(np.mean(simulated_risks), 2)
-    success_prob = round(len([r for r in simulated_risks if r <= baseline_risk * 1.5]) / 10, 1)
+    avg_sim_cost = round(np.mean(simulated_costs), 2)
+    efficiency_score = round(len([c for c in simulated_costs if c <= baseline_cost * 1.5]) / 10, 1)
 
-    return {"path": path, "baseline": baseline_risk, "avg_simulated": avg_sim_risk, "success_prob": success_prob}
+    return {"path": path, "baseline": baseline_cost, "avg_simulated": avg_sim_cost, "success_prob": efficiency_score}
 
 @app.route('/')
 def home():
-    conn = sqlite3.connect('crisis_logs.db')
+    conn = sqlite3.connect('optim_flow.db')
     c = conn.cursor()
     c.execute("SELECT * FROM simulations ORDER BY id DESC LIMIT 5")
     history = c.fetchall()
@@ -106,9 +106,9 @@ def simulate():
     date_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     route_str = " -> ".join(r_plan['path'])
     
-    conn = sqlite3.connect('crisis_logs.db')
+    conn = sqlite3.connect('optim_flow.db')
     c = conn.cursor()
-    c.execute("INSERT INTO simulations (date, route, risk, payload_value) VALUES (?, ?, ?, ?)",
+    c.execute("INSERT INTO simulations (date, route, cost, payload_value) VALUES (?, ?, ?, ?)",
               (date_str, route_str, r_plan['avg_simulated'], s_plan['max_value']))
     conn.commit()
     conn.close()
